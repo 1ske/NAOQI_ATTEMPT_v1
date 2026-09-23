@@ -1,0 +1,43 @@
+diff --git a/controllers/naoqisim/Singletons.cpp b/controllers/naoqisim/Singletons.cpp
+index ea794ec..04e5898 100644
+--- a/controllers/naoqisim/Singletons.cpp
++++ b/controllers/naoqisim/Singletons.cpp
+@@ -1,4 +1,6 @@
+ #include "Singletons.hpp"
++#include <cctype>
++#include <cstdlib>
+ #include <stdlib.h>
+ #include <iostream>
+ #include <sstream>
+@@ -21,14 +23,23 @@ HALInterface *Singletons::mHal = NULL;
+ Sim::SimLauncher* Singletons::mLauncher = NULL;
+ 
+ bool Singletons::initialize(const string &model, int naoqiPort, void (*halInitializedCallback)()) {
+-  // model file name to upper
+-  string robotFileName = model;
+-  for (int i = 1; i < (int)robotFileName.length(); i++)
+-    robotFileName[i] = toupper(robotFileName[i]);
+-  // remove "_" in the file name
+-  std::string::iterator newEnd = std::remove(robotFileName.begin(),
+-                                             robotFileName.end(), '_');
+-  robotFileName.erase(newEnd, robotFileName.end());
++  // Webots >= R2022 Nao PROTO reports e.g. "NAO_H25_VV5 (red)"; the SDK wants "NAOH25V50".
++  // Keep the H value and the version digits, pad a single digit version with "0".
++  string hValue, versionDigits;
++  size_t h = model.find("_H");
++  if (h != string::npos)
++    hValue = model.substr(h + 2, 2);
++  size_t v = model.find("_V", h == string::npos ? 0 : h);
++  if (v != string::npos)
++    for (size_t i = v + 2; i < model.length() && model[i] != ' '; i++)
++      if (isdigit(model[i]))
++        versionDigits += model[i];
++  if (versionDigits.length() == 1)
++    versionDigits += "0";
++  string robotFileName = "NAOH" + hValue + "V" + versionDigits;
++  if (getenv("NAOQISIM_MODEL"))
++    robotFileName = getenv("NAOQISIM_MODEL");
++  cout << "Webots model \"" << model << "\" -> " << robotFileName << ".xml\n";
+ 
+   cout << "===== starting alsim controller =====\n" << flush;
+ 

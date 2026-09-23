@@ -24,9 +24,13 @@ if math.hypot(args.x, args.y) > MAX_DISTANCE:
     raise SystemExit("refusing to walk more than %.1f m in one moveTo" % MAX_DISTANCE)
 p = proxies(args, "ALMotion", "ALRobotPosture")
 motion, posture = p["ALMotion"], p["ALRobotPosture"]
+if any(math.isnan(v) for v in motion.getRobotPosition(True)):
+    # seen with naoqisim under emulation after a HAL stall (NOTES.md); the walk won't move
+    raise SystemExit("ALMotion odometry is NaN, the walk would not move: restart NAOqi")
 
 with safe_session(motion):
-    posture.goToPosture("StandInit", 0.5)
+    if not posture.goToPosture("StandInit", 0.5) or posture.getPostureFamily() != "Standing":
+        raise SystemExit("could not reach StandInit (now %s), not walking" % posture.getPosture())
     motion.moveInit()
     for i in range(args.repeat):
         start = motion.getRobotPosition(True)

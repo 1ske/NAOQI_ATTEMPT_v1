@@ -15,7 +15,8 @@ K_RGB = 11
 
 def extra(parser):
     parser.add_argument("--camera", type=int, default=K_TOP, help="0 top, 1 bottom")
-    parser.add_argument("--resolution", type=int, default=K_VGA, help="1 QVGA, 2 VGA")
+    # naoqisim only fills a QVGA buffer; VGA there returns an empty (green) image
+    parser.add_argument("--resolution", type=int, default=K_QVGA, help="1 QVGA, 2 VGA")
     parser.add_argument("--out", default="out/camera.png")
 
 args = parse_args(__doc__, extra)

@@ -20,7 +20,8 @@ scripts (Python 2.7, pynaoqi) → NAOqi 2.1.4 → { Webots NAO (via naoqisim) | 
 ## Run against Webots
 
 1. Open `webots/worlds/nao_flat.wbt` in Webots R2025a and start it in **real-time** mode.
-2. `docker compose up naoqisim`: it attaches to the NAO and serves NAOqi on port 9559.
+2. `docker compose up naoqisim`: it attaches to the NAO and serves NAOqi on port 9559
+   (wait for `NAOqi is ready`, about a minute under emulation).
    For the camera, use `NAOQISIM_FLAGS= docker compose up naoqisim` (without `-nocam`).
 3. Run a script:
    ```
@@ -28,6 +29,14 @@ scripts (Python 2.7, pynaoqi) → NAOqi 2.1.4 → { Webots NAO (via naoqisim) | 
    docker compose run --rm client python walk.py --x 0.5 --repeat 3
    ```
    `NAO_IP` defaults to `naoqisim`. Every script takes `--ip` and `--port`, plus `--help`.
+4. Optional ground truth (real position/tilt, not NAOqi's estimate), on the Mac:
+   ```
+   WEBOTS_HOME=/Applications/Webots.app /Applications/Webots.app/Contents/MacOS/webots-controller \
+       --robot-name=truth webots/tools/truth.py
+   ```
+
+If `walk.py` says odometry is NaN, restart naoqisim (see NOTES.md, "Emulation stalls").
+To reset the robot, reload the world in Webots; naoqisim reconnects when restarted.
 
 | script | what it does |
 |---|---|
@@ -37,8 +46,8 @@ scripts (Python 2.7, pynaoqi) → NAOqi 2.1.4 → { Webots NAO (via naoqisim) | 
 | `walk.py` | `moveTo(x, y, theta)` × `--repeat`, prints odometry |
 | `head.py` | head yaw/pitch targets, commanded vs measured |
 | `sensors.py` | sonar, foot bumpers, inertial angles (no motion) |
-| `fall.py` | waits for a fall, then stands back up |
-| `camera.py` | saves one camera image to `scripts/out/camera.png` |
+| `fall.py` | waits for a fall, then tries to stand back up |
+| `camera.py` | saves one camera image (QVGA) to `scripts/out/camera.png` |
 
 ## Run against the real NAO V5
 

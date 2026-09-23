@@ -1,0 +1,117 @@
+diff --git a/controllers/naoqisim/InertialUnit.cpp b/controllers/naoqisim/InertialUnit.cpp
+index a235024..9b8120c 100644
+--- a/controllers/naoqisim/InertialUnit.cpp
++++ b/controllers/naoqisim/InertialUnit.cpp
+@@ -5,6 +5,9 @@
+ #include <webots/inertial_unit.h>
+ #include <webots/accelerometer.h>
+ #include <webots/gyro.h>
++#include <cmath>
++#include <cstdio>
++#include <cstdlib>
+ #include <iostream>
+ #define _USE_MATH_DEFINES
+ #include <math.h>
+@@ -12,9 +15,16 @@
+ using namespace Sim;
+ using namespace std;
+ 
++static double wrapAngle(double a) {
++  return atan2(sin(a), cos(a));
++}
++
+ InertialUnit::InertialUnit(const InertialSensor *sensor, int step) : Device("InertialUnit") {
+ 
+   mSensor = sensor;
++  mStep = step;
++  mAnglesInitialized = false;
++  mAngleX = mAngleY = 0.0;
+ 
+   mInertialUnit = wb_robot_get_device("inertial unit");
+   if (mInertialUnit)
+@@ -50,26 +60,59 @@ void InertialUnit::update() {
+   double gyrX = 0.0;
+   double gyrY = 0.0;
+ 
+-  if (mInertialUnit) {
+-    // roll/pitch/yaw angles in rad
+-    const double *rpy = wb_inertial_unit_get_roll_pitch_yaw(mInertialUnit);
+-    angleX = rpy[0];  // roll
+-    angleY = -rpy[1];  // -pitch
+-  }
+-
+   if (mAccelerometer) {
+     // linear acceleration in m/s^2
+     const double *acc = wb_accelerometer_get_values(mAccelerometer);
+-    accX = acc[0];
+-    accY = acc[1];
+-    accZ = acc[2];
++    // NaN until the first sample: send "upright" instead, NaN would stick in ALMotion's state
++    if (!std::isnan(acc[0]) && !std::isnan(acc[1]) && !std::isnan(acc[2])) {
++      accX = acc[0];
++      accY = acc[1];
++      accZ = acc[2];
++    } else
++      accZ = -9.81;  // device frame is upside down, see below
+   }
+ 
+   if (mGyroscope) {
+     // angular velocity in rad/s
+     const double *angVel = wb_gyro_get_values(mGyroscope);
+-    gyrX = angVel[0];
+-    gyrY = angVel[1];
++    gyrX = std::isnan(angVel[0]) ? 0.0 : angVel[0];
++    gyrY = std::isnan(angVel[1]) ? 0.0 : angVel[1];
++  }
++
++  if (mAccelerometer) {
++    // Torso roll/pitch (AngleX/AngleY, x forward, y left, z up) from gravity, fused with the gyro.
++    // Not from the InertialUnit: in the R2022+ Nao PROTO it has yAxis FALSE, and Webots implements
++    // that by zeroing a component of the rotation axis, which corrupts roll/pitch once the robot
++    // has turned. The accelerometer is mounted rotated 180 deg about x: torso frame = (x, -y, -z).
++    // Pitch is the outer angle (+-pi) and roll the inner one (+-pi/2), which is what NAOqi's
++    // posture library expects (LyingBack AngleY = -1.62, LyingBelly AngleX ~ 0).
++    const double fx = accX, fy = -accY, fz = -accZ;
++    const double accAngleX = atan2(fy, sqrt(fx * fx + fz * fz));
++    const double accAngleY = atan2(-fx, fz);
++    if (!mAnglesInitialized || !mGyroscope) {
++      mAngleX = accAngleX;
++      mAngleY = accAngleY;
++      mAnglesInitialized = true;
++    } else {
++      const double k = 0.98;  // complementary filter, ~1 s time constant at 20 ms steps
++      const double dt = mStep / 1000.0;
++      mAngleX = wrapAngle(mAngleX + gyrX * dt);
++      mAngleY = wrapAngle(mAngleY + gyrY * dt);
++      mAngleX = wrapAngle(mAngleX + (1.0 - k) * wrapAngle(accAngleX - mAngleX));
++      mAngleY = wrapAngle(mAngleY + (1.0 - k) * wrapAngle(accAngleY - mAngleY));
++    }
++    angleX = mAngleX;
++    angleY = mAngleY;
++    if (getenv("NAOQISIM_IMU_DEBUG") && *getenv("NAOQISIM_IMU_DEBUG") && ((int)(wb_robot_get_time() * 1000) % 1000) < mStep) {
++      printf("IMU t=%.2f acc=(%.2f %.2f %.2f) accAngles=(%.3f %.3f) angles=(%.3f %.3f)\n",
++             wb_robot_get_time(), accX, accY, accZ, accAngleX, accAngleY, angleX, angleY);
++      fflush(stdout);
++    }
++  } else if (mInertialUnit) {
++    // roll/pitch/yaw angles in rad (original naoqisim, only right before Webots R2022a)
++    const double *rpy = wb_inertial_unit_get_roll_pitch_yaw(mInertialUnit);
++    angleX = rpy[0];  // roll
++    angleY = -rpy[1];  // -pitch
+   }
+ 
+   // filter values
+diff --git a/controllers/naoqisim/InertialUnit.hpp b/controllers/naoqisim/InertialUnit.hpp
+index d40e4f4..81ec209 100644
+--- a/controllers/naoqisim/InertialUnit.hpp
++++ b/controllers/naoqisim/InertialUnit.hpp
+@@ -30,6 +30,9 @@ private:
+ 
+   WbDeviceTag mAccelerometer, mGyroscope, mInertialUnit;
+   const Sim::InertialSensor *mSensor;
++  int mStep;
++  bool mAnglesInitialized;
++  double mAngleX, mAngleY;  // torso roll/pitch estimate from accelerometer + gyro
+   LowPassFilter *mFilters[7];
+ };
+ 

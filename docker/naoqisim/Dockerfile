@@ -11,7 +11,7 @@ ARG SDK_SHA256=074744b7919edd59d293390ebe35648817881e2a656cc036b42f563267024c25
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl bzip2 git make netcat-openbsd \
-      libglib2.0-0 libdbus-1-3 \
+      libglib2.0-0 libdbus-1-3 libusb-0.1-4 \
     && rm -rf /var/lib/apt/lists/*
 
 # Webots for Linux, only for libController and the controller Makefiles.
@@ -39,11 +39,16 @@ RUN for p in /tmp/patches/*.patch; do echo "applying $p"; git apply "$p"; done \
 
 ENV WEBOTS_NAOSIM_PATH=/opt/naoqisim/aldebaran/simulator-sdk
 ENV LD_LIBRARY_PATH=${WEBOTS_NAOSIM_PATH}/lib:${WEBOTS_HOME}/lib/controller
-# Fail if naoqisim can't resolve a library; only list what NAOqi's plugin modules miss.
-RUN if ldd controllers/naoqisim/naoqisim | grep "not found"; then exit 1; fi \
+# Fail if naoqisim, hal or naoqi-bin can't resolve a library; only list what plugin modules miss.
+RUN for f in controllers/naoqisim/naoqisim ${WEBOTS_NAOSIM_PATH}/bin/hal ${WEBOTS_NAOSIM_PATH}/bin/naoqi-bin; do \
+         if ldd "$f" | grep "not found"; then echo "missing libraries for $f"; exit 1; fi; \
+       done \
     && for f in ${WEBOTS_NAOSIM_PATH}/lib/naoqi/*.so; do \
          ldd "$f" | grep "not found" | sed "s|^|$(basename $f): |" || true; \
        done
 COPY entrypoint.sh /entrypoint.sh
+# NAOqi refuses to run as root
+RUN useradd -m nao
+USER nao
 EXPOSE 9559
 ENTRYPOINT ["/entrypoint.sh"]

@@ -9,7 +9,8 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       WEBOTS_CONTROLLER_URL: ${WEBOTS_CONTROLLER_URL:-tcp://host.docker.internal:1234/NAO}
-      NAOQISIM_FLAGS: ${NAOQISIM_FLAGS:--nocam}
+      NAOQISIM_FLAGS: ${NAOQISIM_FLAGS--nocam}  # set empty to enable the camera
+      NAOQISIM_IMU_DEBUG: ${NAOQISIM_IMU_DEBUG:-}  # set to 1 to log IMU angles once per sim second
 
   client:
     build: docker/client

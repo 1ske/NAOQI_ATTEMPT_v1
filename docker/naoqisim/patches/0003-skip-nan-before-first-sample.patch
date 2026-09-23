@@ -1,0 +1,52 @@
+diff --git a/controllers/naoqisim/Fsr.cpp b/controllers/naoqisim/Fsr.cpp
+index 5c94ee1..cbc456a 100644
+--- a/controllers/naoqisim/Fsr.cpp
++++ b/controllers/naoqisim/Fsr.cpp
+@@ -4,6 +4,10 @@
+ #include "util.hpp"
+ #include <webots/robot.h>
+ #include <webots/touch_sensor.h>
++#include <webots/device.h>
++#include <cmath>
++#include <cstdio>
++#include <cstdlib>
+ #include <iostream>
+ #include <assert.h>
+ 
+@@ -47,6 +51,13 @@ void Fsr::update() {
+ 
+ void Fsr::inferValues() {
+   const double *fsv = wb_touch_sensor_get_values(mTag);
++  if (isnan(fsv[0]) || isnan(fsv[1]) || isnan(fsv[2]))
++    return;  // NaN until the first sample
++  if (getenv("NAOQISIM_IMU_DEBUG") && *getenv("NAOQISIM_IMU_DEBUG") &&
++      ((int)(wb_robot_get_time() * 1000) % 1000) < 20) {
++    printf("FSR %s t=%.2f force=(%.2f %.2f %.2f)\n", wb_device_get_name(mTag), wb_robot_get_time(), fsv[0], fsv[1], fsv[2]);
++    fflush(stdout);
++  }
+   double val[4];
+ 
+   // The coefficients were calibrated against the real
+diff --git a/controllers/naoqisim/HipMotor.cpp b/controllers/naoqisim/HipMotor.cpp
+index b91b2ca..5678f8e 100644
+--- a/controllers/naoqisim/HipMotor.cpp
++++ b/controllers/naoqisim/HipMotor.cpp
+@@ -4,6 +4,7 @@
+ #include <webots/robot.h>
+ #include <webots/motor.h>
+ #include <webots/position_sensor.h>
++#include <cmath>
+ #include <iostream>
+ #include <cassert>
+ 
+@@ -56,7 +57,9 @@ void HipMotor::update() {
+   // effective position feedback
+   if (mSensor) {
+     double feedback = wb_position_sensor_get_value(mLeftSensorTag);
+-    if (! Singletons::hal()->sendAngleSensorValue(mSensor, (float)feedback))
++    // NaN until the first sample (Motor::update() skips it too); ALMotion keeps a NaN
++    // "max leg length" forever and then can't walk ("compute torso height failed")
++    if (!isnan(feedback) && ! Singletons::hal()->sendAngleSensorValue(mSensor, (float)feedback))
+       cerr << "Sim::HALInterface::sendAngleSensorValue() failed.\n";
+   }
+ 

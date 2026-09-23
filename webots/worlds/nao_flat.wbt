@@ -42,7 +42,14 @@ WoodenBox {
   size 0.3 0.3 0.3
   mass 2
 }
-Nao {
+DEF NAO Nao {
   name "NAO"
   controller "<extern>"
+}
+# Ground truth for tests (webots/tools/truth.py), not seen by NAOqi.
+Robot {
+  name "truth"
+  controller "<extern>"
+  supervisor TRUE
+  synchronization FALSE  # optional: the simulation doesn't wait for it
 }

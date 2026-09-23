@@ -1,0 +1,22 @@
+# Webots itself runs on the Mac: open webots/worlds/nao_flat.wbt first.
+services:
+  naoqisim:
+    build: docker/naoqisim
+    platform: linux/amd64
+    ports:
+      - "9559:9559"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      WEBOTS_CONTROLLER_URL: ${WEBOTS_CONTROLLER_URL:-tcp://host.docker.internal:1234/NAO}
+      NAOQISIM_FLAGS: ${NAOQISIM_FLAGS:--nocam}
+
+  client:
+    build: docker/client
+    platform: linux/amd64
+    volumes:
+      - ./scripts:/scripts
+    working_dir: /scripts
+    environment:
+      NAO_IP: ${NAO_IP:-naoqisim}
+    profiles: ["client"]

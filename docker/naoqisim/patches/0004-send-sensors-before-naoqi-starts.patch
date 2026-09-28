@@ -1,0 +1,100 @@
+diff --git a/controllers/naoqisim/Nao.hpp b/controllers/naoqisim/Nao.hpp
+index 5153bad..99591d7 100644
+--- a/controllers/naoqisim/Nao.hpp
++++ b/controllers/naoqisim/Nao.hpp
+@@ -17,11 +17,13 @@ public:
+   // this function returns when Webots simulation is terminated by the user
+   void run();
+ 
++  // one exchange of sensor values and commands with HAL, after a Webots step
++  void update();
++
+ private:
+   int mTimeStep;
+   std::vector<Device*> mDevices;
+ 
+-  void update();
+   void checkRealTime();
+ };
+ 
+diff --git a/controllers/naoqisim/Singletons.cpp b/controllers/naoqisim/Singletons.cpp
+index 04e5898..3f17f21 100644
+--- a/controllers/naoqisim/Singletons.cpp
++++ b/controllers/naoqisim/Singletons.cpp
+@@ -87,7 +87,7 @@ bool Singletons::initialize(const string &model, int naoqiPort, void (*halInitia
+   mLauncher = new Sim::SimLauncher();
+ #ifndef _WIN32
+   // TODO: remove this case when Aldebaran release the fixed simulator-sdk for Mac and Linux 64
+-  return mLauncher->launch(mModel, naoqiPort, sdkPrefix);
++  return mLauncher->launch(mModel, naoqiPort, sdkPrefix, std::vector<std::string>(), halInitializedCallback);
+ #else
+   return mLauncher->launch(mModel, naoqiPort, wbu_system_short_path(sdkPrefix.c_str()), std::vector<std::string>(), halInitializedCallback);
+ #endif
+diff --git a/controllers/naoqisim/naoqisim.cpp b/controllers/naoqisim/naoqisim.cpp
+index 40018e4..76f0273 100644
+--- a/controllers/naoqisim/naoqisim.cpp
++++ b/controllers/naoqisim/naoqisim.cpp
+@@ -24,6 +24,25 @@ static void printUsage() {
+ 
+ Mutex *halInitializationMutex=NULL;
+ 
++static int timeStep;
++static bool useCameras = true;
++static Nao *nao = NULL;
++
++#ifndef _WIN32
++// Run by SimLauncher::launch() once hal is up and before naoqi starts. The SDK requires it to send
++// every sensor value (sim_launcher.h). Without it HAL served NaN joint positions until the main loop
++// started, ALMotion's joint velocity filter took them in at startup and stayed NaN, and so did its
++// odometry (getRobotPosition), which made moveTo() do nothing.
++static void initSimulator() {
++  nao = new Nao(timeStep, useCameras);
++  for (int i = 0; i < 2; i++) {  // Webots sensors have their first sample after one step
++    wb_robot_step(timeStep);
++    nao->update();
++  }
++  cout << "===== sensors sent to HAL before NAOqi start =====\n" << flush;
++}
++#endif
++
+ #ifdef _WIN32 // TODO: remove this case when Aldebaran release the fixed simulator-sdk for Mac and Linux 64
+ static void halInitializedCallback();
+ #endif
+@@ -49,7 +68,6 @@ int main(int argc, char *argv[]) {
+     return EXIT_FAILURE;
+   }
+ 
+-  bool useCameras = true;
+   if (argc == 3) {
+     if (strcmp(argv[1], "-nocam") == 0)
+       useCameras = false;
+@@ -67,7 +85,7 @@ int main(int argc, char *argv[]) {
+   wb_robot_init();
+ 
+   // get WorldInfo.basicTimeStep
+-  int timeStep = (int)wb_robot_get_basic_time_step();
++  timeStep = (int)wb_robot_get_basic_time_step();
+ 
+   cout << "===== naoqisim controller started =====\n" << flush;
+   cout << "Press the real-time button [>] to start the simulation, then you can connect Choregraphe.\n" << flush;
+@@ -83,7 +101,7 @@ int main(int argc, char *argv[]) {
+ 
+ #ifndef _WIN32
+   // TODO: remove this case when Aldebaran release the fixed simulator-sdk for Mac and Linux 64
+-  if (! Singletons::initialize(robotModel, naoqiPort, NULL))
++  if (! Singletons::initialize(robotModel, naoqiPort, initSimulator))
+      return EXIT_FAILURE;
+   sleep(1);
+ #else
+@@ -98,8 +116,9 @@ int main(int argc, char *argv[]) {
+   halInitializationMutex->lock();
+ #endif
+ 
+-  // create/run/destroy Nao
+-  Nao *nao = new Nao(timeStep, useCameras);
++  // create/run/destroy Nao (initSimulator() has already created it on Linux)
++  if (! nao)
++    nao = new Nao(timeStep, useCameras);
+   nao->run();
+   delete nao;
+ 

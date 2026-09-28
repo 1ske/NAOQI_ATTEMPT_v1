@@ -46,6 +46,9 @@ RUN for f in controllers/naoqisim/naoqisim ${WEBOTS_NAOSIM_PATH}/bin/hal ${WEBOT
     && for f in ${WEBOTS_NAOSIM_PATH}/lib/naoqi/*.so; do \
          ldd "$f" | grep "not found" | sed "s|^|$(basename $f): |" || true; \
        done
+# Clock anomaly logger for tools/trials.sh (NOTES.md "Emulation stalls")
+COPY clockwatch.c /tmp/clockwatch.c
+RUN mkdir -p /opt/tools && gcc -O2 -Wall -o /opt/tools/clockwatch /tmp/clockwatch.c && rm /tmp/clockwatch.c
 COPY entrypoint.sh /entrypoint.sh
 # NAOqi refuses to run as root
 RUN useradd -m nao

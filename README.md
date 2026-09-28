@@ -22,7 +22,7 @@ scripts (Python 2.7, pynaoqi) → NAOqi 2.1.4 → { Webots NAO (via naoqisim) | 
 1. Open `webots/worlds/nao_flat.wbt` in Webots R2025a and start it in **real-time** mode.
 2. `docker compose up naoqisim`: it attaches to the NAO and serves NAOqi on port 9559
    (wait for `NAOqi is ready`, about a minute under emulation).
-   For the camera, use `NAOQISIM_FLAGS= docker compose up naoqisim` (without `-nocam`).
+   Cameras are on (QVGA only). For a slightly faster sim without them: `NAOQISIM_FLAGS=-nocam docker compose up naoqisim`.
 3. Run a script:
    ```
    docker compose run --rm client python connect.py
@@ -35,7 +35,7 @@ scripts (Python 2.7, pynaoqi) → NAOqi 2.1.4 → { Webots NAO (via naoqisim) | 
        --robot-name=truth webots/tools/truth.py
    ```
 
-If `walk.py` says odometry is NaN, restart naoqisim (see NOTES.md, "Emulation stalls").
+If `walk.py` says odometry is NaN, run `tools/sim_reset.sh` (see NOTES.md, "NaN odometry").
 To reset the robot, reload the world in Webots; naoqisim reconnects when restarted.
 
 | script | what it does |

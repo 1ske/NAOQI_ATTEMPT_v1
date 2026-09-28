@@ -28,6 +28,7 @@ Ground truth ("truth") below comes from `webots/tools/truth.py` (Webots supervis
 | `0001-model-name-from-r2025a-proto.patch` | The PROTO's model string is `NAO_H25_VV5 (red)`; naoqisim looked for `NAOH25VV5 (RED).xml`. Now parsed to `NAOH25V50` (override with `NAOQISIM_MODEL`). |
 | `0002-inertial-angles-from-accelerometer-gyro.patch` | The PROTO's InertialUnit has `yAxis FALSE`. Webots implements that by zeroing a component of the rotation axis, which corrupts roll/pitch as soon as the robot has turned (NAOqi saw a 90° turn as "LyingRight" while truth said upright). AngleX/AngleY now come from the accelerometer (gravity) fused with the gyro. Convention checked against NAOqi's own posture library (`postures_naoh25.xml`): StandInit AngleY 0.104 (we read 0.100), Crouch −0.052 (−0.051), LyingBack −1.62, i.e. pitch is the outer angle (±π), roll the inner one (±π/2). Matches truth within ~0.1° standing and after turning (lying poses only checked against NAOqi's posture recognition). |
 | `0003-skip-nan-before-first-sample.patch` | Webots sensors read NaN until their first sample. `Motor` skipped it, `HipMotor` (LHipYawPitch) and `Fsr` didn't: ALMotion kept a NaN leg length (`Left Leg max leg length: compute torso height failed`) and couldn't walk. |
+| `0004-send-sensors-before-naoqi-starts.patch` | The cause of the NaN odometry (see "NaN odometry" below). On Linux naoqisim launched hal + naoqi without the SDK's `initSimulatorFunc`, and only sent sensor values ~1 s later. ALMotion started on HAL's NaN joint positions, its joint velocities went NaN and stayed NaN, and so did `getRobotPosition` once the robot moved. naoqisim now creates the devices in that callback, steps Webots and sends real values before naoqi starts (`sim_launcher.h`: the callback must send every sensor value). Log line: `sensors sent to HAL before NAOqi start`. |
 
 `NAOQISIM_IMU_DEBUG=1 docker compose up naoqisim` logs IMU and FSR values once per sim second.
 
@@ -44,16 +45,37 @@ Ground truth ("truth") below comes from `webots/tools/truth.py` (Webots supervis
 | fall.py | **partial** | falls detected (LyingBack after a backward push). Getting up: **from the back only at speed 1.0** (fails at our 0.5 cap); **from the belly: fails at 0.5 and 1.0**. After a forward push the robot lands head-down (AngleY 1.8 vs NAOqi's LyingBelly 1.38) or twisted (`Unknown`), neither of which ALRobotPosture gets up from. |
 | camera.py | pass at QVGA | image matches the Webots view. naoqisim only fills a QVGA buffer, so a VGA request returns an empty buffer (solid green). Default is now QVGA. |
 
+### NaN odometry: a startup race, fixed by patch 0004 (2026-09-24)
+
+`tools/trials.sh N LABEL` measures it: each trial reloads the world, starts a fresh naoqisim and runs
+`tools/probe_odometry.py` (StandInit, 0.1 m walk, rest, StandInit, watching `getRobotPosition`).
+`clockwatch` runs in the container meanwhile and logs backwards wall-clock jumps and stalls.
+Results and per-trial logs go to `tools/out/` (git-ignored).
+
+| label | OK | notes |
+|---|---|---|
+| baseline (patches 0001–0003) | 0/10 | all NaN 0.96–1.11 s into the first StandInit; 0 backwards jumps, 8/10 trials without any stall > 50 ms |
+| init-sensors (+ 0004) | 10/10 | walk 0.098–0.099 m odometry; stalls up to 98 ms, up to 66 `DcmLostPlugin` lines, 5 small backwards clock jumps (−5 ms): all harmless |
+
+- Not the emulation stalls and not the clock. A boot trace showed the joint positions in ALMemory
+  NaN for ~0.7 s after HAL started, `Motion/Velocity/Sensor/*` going NaN in that window, before
+  `wakeUp` and with the robot still, and staying NaN after the positions became valid.
+- Older starts were slower, so naoqisim sometimes won the race (1 of 4 OK before). With cached
+  images NAOqi is ready in ~4 s and it lost every time.
+- So no clock shim, `SYS_NICE` or Docker CPU tuning was needed; not tried.
+- End to end through use_the_naoqi_bridge's MCP: stand, `walk_to(0.3)` completed (truth 0.26 m),
+  a 90° turn (truth ~78°), rest.
+- `tools/sim_reset.sh` retries reload + fresh naoqisim until a probe passes, if it ever comes back.
+
 ### Emulation stalls (the Mac↔Docker risk from the plan)
 
 - Even an idle loop in an amd64 container sometimes isn't scheduled for ~200 ms. naoqisim's HAL
   then misses its cycle (`DcmLostPlugin: Decrease stiffness due to HAL cycle time error of 150–420 ms`)
   and the DCM briefly lowers stiffness. Once HAL also saw time step backwards (`4294967048 ms` = −248 ms).
-- In 3 of 4 fresh starts (all patches applied), ALMotion's odometry (`getRobotPosition`) became NaN a few seconds into
-  the first motion (StandZero → StandInit). In the one case I timed, it followed a 203 ms stall by
-  1.7 s, so the stalls are the likely cause, not a proven one. After that `moveTo` returns but the
-  robot doesn't move until NAOqi is restarted. Joints, postures and head keep working.
-  `walk.py` now checks for this and says so.
+- In 3 of 4 fresh starts (patches 0001–0003), ALMotion's odometry (`getRobotPosition`) became NaN a
+  few seconds into the first motion (StandZero → StandInit), and `moveTo` then did nothing until
+  NAOqi restarted. I blamed the stalls; the cause was the startup race above (patch 0004).
+  `walk.py` still checks for NaN.
 - Not caused by memory or CPU load (3 GB free, load ~2/8). Nothing to tune from inside the container.
 
 ### Tools

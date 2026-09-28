@@ -1,5 +1,6 @@
 *.pyc
 scripts/out/
+tools/out/
 
 # Simulator SDK is 275 MB (over GitHub's 100 MB limit): only commit it once git-lfs is installed
 docker/naoqisim/vendor/*.tar.gz

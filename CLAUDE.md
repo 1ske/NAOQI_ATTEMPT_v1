@@ -22,7 +22,7 @@ There is no build step, linter or test suite. "Testing" means running a script a
 ```sh
 # 1. open webots/worlds/nao_flat.wbt in Webots, real-time mode
 docker compose up naoqisim                      # wait for "NAOqi is ready" (~1 min under emulation)
-NAOQISIM_FLAGS= docker compose up naoqisim      # same, with cameras enabled (default is -nocam)
+NAOQISIM_FLAGS=-nocam docker compose up naoqisim # same, cameras disabled (slightly faster sim)
 NAOQISIM_IMU_DEBUG=1 docker compose up naoqisim # log IMU/FSR once per sim second
 
 docker compose run --rm client python connect.py          # single script; every script has --help
@@ -54,11 +54,23 @@ WEBOTS_HOME=/Applications/Webots.app /Applications/Webots.app/Contents/MacOS/web
 
 ## naoqisim specifics
 
-- `docker/naoqisim/Dockerfile` builds naoqisim (pinned `f4c167c`) on Ubuntu 22.04 + Webots R2025a Linux, and applies `docker/naoqisim/patches/*.patch`: PROTO model name, IMU angles from accelerometer+gyro, and skipping NaN sensor samples before the first reading. NOTES.md explains each patch.
+- `docker/naoqisim/Dockerfile` builds naoqisim (pinned `f4c167c`) on Ubuntu 22.04 + Webots R2025a Linux, and applies `docker/naoqisim/patches/*.patch`: PROTO model name, IMU angles from accelerometer+gyro, skipping NaN sensor samples before the first reading, and sending sensor values before NAOqi starts (without that, ALMotion's odometry went NaN at startup). NOTES.md explains each patch.
 - The simulator SDK tarball (275 MB) goes in `docker/naoqisim/vendor/`. It's git-ignored and downloaded with a checksum check if missing.
 - Not available in naoqisim: ALSystem, ALNavigation, ALLocalization, ALVisionRecognition, and the other modules that need libpng12. Camera only fills QVGA buffers.
-- Known sim issues: walks go ~86% of the commanded distance while odometry reports 100%. Emulation stalls can make `getRobotPosition` NaN, and then `moveTo` silently does nothing until naoqisim restarts. Scripts check for NaN.
+- Known sim issues: walks go ~86% of the commanded distance while odometry reports 100%. If `getRobotPosition` is NaN, `moveTo` silently does nothing until naoqisim restarts; patch 0004 fixed the cause (10/10 fresh starts OK), scripts still check for NaN.
+
+## Sim tooling (`tools/`, not robot code)
+
+```sh
+tools/trials.sh 10 <label>   # fresh-start trials: reload world, new naoqisim, probe odometry -> tools/out/trials.csv
+tools/sim_reset.sh           # same, until one passes; leaves naoqisim up and the robot resting
+```
+Stop anything else commanding the robot first (e.g. the use_the_naoqi_bridge bridge). Sim-only logic goes here or in `docker/`, never in `scripts/`.
 
 ## NOTES.md
 
 `NOTES.md` is the lab log. It has per-step results tables (Step 1 naoqisim, Step 2 scripts in Webots, Step 3 real NAO V5) and a "Sim vs robot differences" list. Record new results and sim/robot differences there.
+
+## Other projects using this stack
+
+`docs/NEW_PROJECT.md` describes how a separate repo can own its own Webots worlds and code and still use naoqisim from here (it connects to `host.docker.internal:9559`). Changes to `docker-compose.yml`, the port, or the robot name `NAO` affect those projects.

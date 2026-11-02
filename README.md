@@ -73,6 +73,5 @@ Write results and any sim-vs-robot differences in `NOTES.md`.
 ## Simulator SDK copy
 
 `docker/naoqisim` downloads `simulator-sdk-2.1.4.1-linux64.tar.gz` (checksum-verified) unless a copy
-is in `docker/naoqisim/vendor/`. The file is 275 MB, too big for plain git, so it's git-ignored for now.
-To keep it in the repo: `brew install git-lfs && git lfs install`, remove the vendor line from
-`.gitignore`, then `git add docker/naoqisim/vendor/*.tar.gz`.
+is in `docker/naoqisim/vendor/`. The SDK is SoftBank Robotics' proprietary software, so it's git-ignored:
+keep a local copy there if you like, but don't commit it.

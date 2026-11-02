@@ -2,6 +2,8 @@
 scripts/out/
 tools/out/
 
-# Simulator SDK is 275 MB (over GitHub's 100 MB limit): only commit it once git-lfs is installed
+# Simulator SDK (275 MB): SoftBank's proprietary software, never commit it (not redistributable)
 docker/naoqisim/vendor/*.tar.gz
 webots/worlds/.*.wbproj
+.DS_Store
+.claude/
